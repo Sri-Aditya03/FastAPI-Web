@@ -1,32 +1,30 @@
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-dist/
-build/
+*.pyc
+*.pyo
+*.pyd
 
-# Virtual Environment
+# Virtual environment
 .venv/
-venv/
-ENV/
 env/
+venv/
 
-# IDE
+# VS Code
 .vscode/
+
+# PyCharm
 .idea/
-*.swp
-*.swo
 
-# Environment variables
-.env
-.env.local
+# Docker data
+esdata/
+docker_data/
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
 
 # Logs
 *.log
+
+# Environment variables
+.env
