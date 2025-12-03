@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title if title else "FastAPI App" }}</title>
+
+    <!-- CSS added by child templates -->
+    {% block head %}{% endblock %}
+</head>
+
+<body>
+
+    <!-- Content from child templates -->
+    {% block content %}{% endblock %}
+
+</body>
+</html>

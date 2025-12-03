@@ -1,0 +1,5 @@
+SECRET_KEY = "YOUR_SECRET_JWT_KEY"
+ALGORITHM = "HS256"
+
+ELASTIC_HOST = "http://localhost:9200"
+USER_INDEX = "fastapi_users"
