@@ -1,22 +1,37 @@
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import RedirectResponse
-from jose import JWTError
-from app.core.jwt_handler import decode_access_token
+
+from app.middlewares.jwt_core import decode_jwt
+
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        protected_paths = ["/dashboard"]
 
-        if any(request.url.path.startswith(path) for path in protected_paths):
+    async def dispatch(self, request, call_next):
+
+        path = request.url.path
+
+        # Public paths
+        public_paths = [
+            "/", "/auth/login", "/auth/signup"
+        ]
+
+        if path.startswith("/static"):
+            return await call_next(request)
+
+        if path in public_paths:
+            return await call_next(request)
+
+        if path.startswith("/dashboard"):
             token = request.cookies.get("access_token")
 
             if not token:
-                return RedirectResponse("/")
+                return RedirectResponse("/", status_code=303)
 
-            try:
-                decode_access_token(token)
-            except JWTError:
-                return RedirectResponse("/")
+            email = decode_jwt(token)
 
-        response = await call_next(request)
-        return response
+            if not email:
+                return RedirectResponse("/", status_code=303)
+
+            request.state.user = email
+
+        return await call_next(request)

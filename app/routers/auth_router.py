@@ -1,101 +1,83 @@
-from fastapi import APIRouter, Request, Form
-from fastapi.templating import Jinja2Templates
+from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
+from fastapi.templating import Jinja2Templates
 
-from app.services.user_service import create_user, authenticate_user
-from app.services.elastic_service import get_user_by_email
-from app.core.jwt_handler import create_access_token
+from app.helpers.auth_helpers import (
+    create_user_helper,
+    authenticate_user_helper,
+    check_user_exists_helper
+)
+from app.middlewares.jwt_core import create_jwt
+
 
 router = APIRouter()
-
-# Template Engine
 templates = Jinja2Templates(directory="app/templates")
 
-
-# ============================================================
-# LOGIN PAGE  →  "/"
-# ============================================================
-@router.get("/")
-def login_page(request: Request):
-    return templates.TemplateResponse("auth/login.html", {"request": request})
-
-
-# ============================================================
-# LOGIN POST → "/auth/login"
-# ============================================================
-@router.post("/auth/login")
-def login(email: str = Form(...), password: str = Form(...)):
-    user = get_user_by_email(email)
-
-    # If no user found → redirect signup
-    if not user:
-        return RedirectResponse("/auth/signup", status_code=303)
-
-    # Check password
-    authenticated = authenticate_user(email, password)
-
-    if not authenticated:
-        return templates.TemplateResponse(
-            "auth/login.html",
-            {
-                "request": {},
-                "error": "Incorrect password"
-            }
-        )
-
-    # Valid user → create JWT cookie
-    token = create_access_token(email)
-    response = RedirectResponse("/dashboard", status_code=303)
-    response.set_cookie("access_token", token, httponly=True)
-
-    return response
-
-
-# ============================================================
-# SIGNUP PAGE  →  "/auth/signup"
-# ============================================================
+# ------------------------
+# SIGNUP PAGE
+# ------------------------
 @router.get("/auth/signup")
 def signup_page(request: Request):
     return templates.TemplateResponse("auth/signup.html", {"request": request})
 
 
-# ============================================================
-# SIGNUP POST → "/auth/signup"
-# Stores user in Elasticsearch → redirects dashboard
-# ============================================================
+# ------------------------
+# SIGNUP SUBMIT
+# ------------------------
 @router.post("/auth/signup")
 def signup(
     name: str = Form(...),
     email: str = Form(...),
+    phone: str = Form(...),
     password: str = Form(...),
     confirm_password: str = Form(...)
 ):
-    # Check password match
+
     if password != confirm_password:
         return templates.TemplateResponse(
             "auth/signup.html",
-            {
-                "request": {},
-                "error": "Passwords do not match"
-            }
+            {"request": {}, "error": "Passwords do not match"}
         )
 
-    # Create user in Elasticsearch
-    create_user(name, email, password)
+    if check_user_exists_helper(email, phone):
+        return templates.TemplateResponse(
+            "auth/signup.html",
+            {"request": {}, "error": "User already exists"}
+        )
 
-    # Create login session
-    token = create_access_token(email)
-    response = RedirectResponse("/dashboard", status_code=303)
-    response.set_cookie("access_token", token, httponly=True)
+    create_user_helper(name, email, phone, password)
 
-    return response
+    token = create_jwt(email)
+
+    res = RedirectResponse("/dashboard", status_code=303)
+    res.set_cookie("access_token", token, httponly=True)
+
+    return res
 
 
-# ============================================================
-# LOGOUT → "/auth/logout"
-# ============================================================
+# ------------------------
+# LOGIN SUBMIT
+# ------------------------
+@router.post("/auth/login")
+def login(
+    email: str = Form(...),
+    password: str = Form(...)
+):
+
+    user = authenticate_user_helper(email, password)
+
+    if not user:
+        return RedirectResponse("/auth/signup", status_code=303)
+
+    token = create_jwt(email)
+    res = RedirectResponse("/dashboard", status_code=303)
+    res.set_cookie("access_token", token, httponly=True)
+
+    return res
+
+
 @router.get("/auth/logout")
 def logout():
-    response = RedirectResponse("/", status_code=303)
-    response.delete_cookie("access_token")
-    return response
+    res = RedirectResponse("/", status_code=303)
+    res.delete_cookie("access_token")
+    return res
