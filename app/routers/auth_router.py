@@ -1,31 +1,33 @@
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
-
 from app.helpers.auth_helpers import (
+    validate_signup_fields,
     create_user_helper,
-    authenticate_user_helper,
-    check_user_exists_helper
+    validate_login
 )
 from app.middlewares.jwt_core import create_jwt
+from app.services.redis_service import store_token, blacklist_token
+
+router = APIRouter(prefix="/auth")
 
 
-router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
-
-# ------------------------
-# SIGNUP PAGE
-# ------------------------
-@router.get("/auth/signup")
+# -----------------------------------
+# GET: SIGNUP PAGE
+# -----------------------------------
+@router.get("/signup")
 def signup_page(request: Request):
-    return templates.TemplateResponse("auth/signup.html", {"request": request})
+    return request.app.state.templates.TemplateResponse(
+        "auth/signup.html",
+        {"request": request}
+    )
 
 
-# ------------------------
-# SIGNUP SUBMIT
-# ------------------------
-@router.post("/auth/signup")
+# -----------------------------------
+# POST: SIGNUP SUBMIT
+# -----------------------------------
+@router.post("/signup")
 def signup(
+    request: Request,
     name: str = Form(...),
     email: str = Form(...),
     phone: str = Form(...),
@@ -33,51 +35,67 @@ def signup(
     confirm_password: str = Form(...)
 ):
 
-    if password != confirm_password:
-        return templates.TemplateResponse(
+    error = validate_signup_fields(name, email, phone, password, confirm_password)
+    if error:
+        return request.app.state.templates.TemplateResponse(
             "auth/signup.html",
-            {"request": {}, "error": "Passwords do not match"}
+            {"request": request, "error": error}
         )
 
-    if check_user_exists_helper(email, phone):
-        return templates.TemplateResponse(
-            "auth/signup.html",
-            {"request": {}, "error": "User already exists"}
-        )
-
+    # Creates user (with MD5 user_id but RAW password)
     create_user_helper(name, email, phone, password)
 
-    token = create_jwt(email)
-
-    res = RedirectResponse("/dashboard", status_code=303)
-    res.set_cookie("access_token", token, httponly=True)
-
-    return res
+    return RedirectResponse(url="/auth/login", status_code=303)
 
 
-# ------------------------
-# LOGIN SUBMIT
-# ------------------------
-@router.post("/auth/login")
+# -----------------------------------
+# GET: LOGIN PAGE
+# -----------------------------------
+@router.get("/login")
+def login_page(request: Request):
+    return request.app.state.templates.TemplateResponse(
+        "auth/login.html",
+        {"request": request}
+    )
+
+
+# -----------------------------------
+# POST: LOGIN SUBMIT
+# -----------------------------------
+@router.post("/login")
 def login(
+    request: Request,
     email: str = Form(...),
     password: str = Form(...)
 ):
-
-    user = authenticate_user_helper(email, password)
+    user = validate_login(email, password)
 
     if not user:
-        return RedirectResponse("/auth/signup", status_code=303)
+        return request.app.state.templates.TemplateResponse(
+            "auth/login.html",
+            {"request": request, "error": "Invalid credentials"}
+        )
 
-    token = create_jwt(email)
-    res = RedirectResponse("/dashboard", status_code=303)
-    res.set_cookie("access_token", token, httponly=True)
+    # LOGIN SUCCESS → CREATE JWT, STORE IN REDIS, AND SET COOKIE
+    token = create_jwt(user["email"])
+    store_token(user["user_id"], token)
+    
+    response = RedirectResponse(url="/dashboard", status_code=303)
+    response.set_cookie("access_token", token, httponly=True)
+    return response
 
-    return res
 
-
-@router.get("/auth/logout")
-def logout():
-    res = RedirectResponse("/", status_code=303)
-    res.delete_cookie("access_token")
-    return res
+# -----------------------------------
+# LOGOUT
+# -----------------------------------
+@router.get("/logout")
+def logout(request: Request):
+    token = request.cookies.get("access_token")
+    
+    # Blacklist the token in Redis
+    if token:
+        blacklist_token(token)
+    
+    response = RedirectResponse("/", status_code=303)
+    response.delete_cookie("access_token")
+    return response

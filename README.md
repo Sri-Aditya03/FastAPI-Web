@@ -14,4 +14,4 @@ A complete authentication system using:
 docker compose up -d
 
 ### Start FastAPI
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload 

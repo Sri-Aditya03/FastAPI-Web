@@ -13,6 +13,11 @@ services:
       - "9200:9200"
     volumes:
       - esdata:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.13.0
@@ -22,6 +27,24 @@ services:
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - xpack.security.enabled=false
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  redis:
+    image: redis:7.0
+    container_name: redis_container
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass "" --protected-mode no
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   esdata:
+  redisdata:

@@ -1,43 +1,52 @@
+from datetime import datetime
 from app.hashing.md5_hash import md5_hash
 from app.services.elastic_service import (
     insert_user_es,
-    get_user_by_email_phone_es
+    get_user_by_email_es   # UPDATED
 )
 
 
-def generate_user_id(email: str, phone: str) -> str:
-    return md5_hash(email + phone)
+def validate_signup_fields(name: str, email: str, phone: str, password: str, confirm_password: str):
+    if password != confirm_password:
+        return "Passwords do not match."
+    if not name or not email or not phone or not password:
+        return "All fields are required."
+    return None
 
 
-def create_user_helper(name, email, phone, password):
-    hashed_pw = md5_hash(password)
+def create_user_helper(name: str, email: str, phone: str, password: str):
 
-    user_id = generate_user_id(email, phone)
+    # Generate hashed user_id
+    user_id = md5_hash(email + phone)
 
-    user_doc = {
-        "id": user_id,
+    # User document stored in Elasticsearch
+    user_data = {
+        "user_id": user_id,
         "name": name,
         "email": email,
         "phone": phone,
-        "password": hashed_pw
+        "password": password,  
+        "created_at": datetime.utcnow().isoformat()
     }
 
-    insert_user_es(user_id, user_doc)
+    insert_user_es(user_id, user_data)
+
+    return user_data
 
 
-def check_user_exists_helper(email, phone):
-    return get_user_by_email_phone_es(email, phone)
+def validate_login(email: str, password: str):
+ 
 
-
-def authenticate_user_helper(email: str, password: str):
-    user = get_user_by_email_phone_es(email)
+    # Fetch user based ONLY on email
+    user = get_user_by_email_es(email)
 
     if not user:
         return None
 
-    hashed = md5_hash(password)
+    stored_password = user["_source"]["password"]
 
-    if user["password"] != hashed:
+    # Compare raw password
+    if stored_password != password:
         return None
 
-    return user
+    return user["_source"]

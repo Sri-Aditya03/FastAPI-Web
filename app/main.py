@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from app.routers.index import router as index_router
 from app.routers.auth_router import router as auth_router
@@ -10,6 +11,9 @@ from app.services.elastic_service import init_index
 
 
 app = FastAPI()
+
+# Templates
+app.state.templates = Jinja2Templates(directory="app/templates")
 
 # Static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
